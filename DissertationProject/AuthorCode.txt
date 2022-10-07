@@ -1,0 +1,2073 @@
+#include "application.h"
+
+namespace Engine {
+	application::application(int width, int height) {
+		Engine::window_desc desc;
+		desc.m_width = width;
+		desc.m_height = height;
+		desc.m_fullscreen = false;
+
+		m_window = std::make_unique<win_window>(desc);
+		m_renderer = renderer::get_instance();
+
+
+		EventHandler& wineventhandlr = m_window->get_event_handler();
+
+		std::cout << "application" << std::endl;
+	}
+
+	application::application() : application(800, 600) {
+
+	}
+
+	application::~application() {
+
+		WARN("application::~application()");
+		renderer::exit();
+		m_renderer.reset();
+		
+	}
+
+	void application::set_cursor(std::string c) {
+		if (c == "Default") {
+			SetCursor(LoadCursorW(NULL, CURSOR_DEFAULT));
+		}
+		else if(c == "Edit") {
+			SetCursor(LoadCursorW(NULL, CURSOR_IBEAM));
+		}
+		else if (c == "Hourglass") {
+			SetCursor(LoadCursorW(NULL, CURSOR_HOURGLASS));
+		}
+		else if (c == "ResizeVertical") {
+			SetCursor(LoadCursorW(NULL, CURSOR_SIZEVERTICAL));
+		}
+		else if (c == "Pointer") {
+			SetCursor(LoadCursorW(NULL, CURSOR_HAND));
+		}
+		else if (c == "ResizeHorizontal") {
+			SetCursor(LoadCursorW(NULL, CURSOR_SIZEHORIZONTAL));
+		}
+	}
+
+	glm::vec2 application::mouse_pos() {
+		return m_window->mouse_position();
+	}
+}
+
+#pragma once
+#include "core.h"
+#include "win_window.h"
+#include "Event.h"
+#include "renderer.h"
+
+namespace Engine {
+	class application
+	{
+	public:
+		application();
+		application(int width, int height);
+		~application();
+
+		void set_cursor(std::string c);
+		
+		virtual void on_update() = 0;
+		glm::vec2 mouse_pos();
+
+	protected:
+		std::unique_ptr<win_window> m_window;
+		std::shared_ptr<renderer> m_renderer;
+		lua_State* m_Lua;
+	};
+}
+
+#include "Camera.h"
+
+Camera::Camera() {
+	m_Position = glm::vec2(0.f);
+	m_Dimensions = glm::vec2(1920.f, 1080.f);
+	RebuildProjection();
+}
+
+Camera::Camera(const glm::vec2& p, const glm::vec2& d) : m_Position(p), m_Dimensions(d) {
+	RebuildProjection();
+}
+
+Camera::~Camera() {
+	//stuff
+}
+
+void Camera::RebuildProjection() {
+
+	m_Proj = glm::ortho(
+		m_Position.x - m_Dimensions.x / 2.f,
+		m_Position.x + m_Dimensions.x / 2.f,
+		m_Position.y - m_Dimensions.y / 2.f,
+		m_Position.y + m_Dimensions.y / 2.f
+	);
+}
+
+std::shared_ptr<Camera> Camera::Create(const glm::vec2& position, const glm::vec2& dimensions) {
+	return std::shared_ptr<Camera>(new Camera(position, dimensions));
+}
+
+void Camera::SetPosition(const glm::vec2& p) {
+	m_Position = p;
+	RebuildProjection();
+}
+
+void Camera::SetDimensions(const glm::vec2& d) {
+	m_Dimensions = d;
+	RebuildProjection();
+}
+
+glm::mat4& Camera::GetProjection() {
+	return m_Proj;
+}
+
+#pragma once
+#include "core.h"
+class Camera
+{
+private:
+	glm::vec2 m_Position;
+	glm::vec2 m_Dimensions;
+	glm::mat4 m_Proj;
+
+	void RebuildProjection();
+
+	Camera();
+	Camera(const glm::vec2& p, const glm::vec2& d);
+public:
+	~Camera();
+
+	static std::shared_ptr<Camera> Create(const glm::vec2& position, const glm::vec2& dimensions);
+
+	void SetPosition(const glm::vec2& pos);
+	void SetDimensions(const glm::vec2& dims);
+
+	glm::mat4& GetProjection();
+};
+
+#pragma once
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include "Glad/glad.h"
+#include "GLFW/glfw3.h"
+#include "GLFW/glfw3native.h" //allows for native COM interface
+#include "glm/glm.hpp"
+#include "glm/gtx/string_cast.hpp"//for printing glm vectors with cout
+#include "glm/gtc/type_ptr.hpp"
+#include "ft2build.h"
+#include FT_FREETYPE_H
+#include <stdio.h>
+#include <Windows.h>
+#include <iostream>
+#include "luainclude.h"
+
+#ifndef __CORE_H
+
+#define __CORE_H 1
+#define FOREGROUND_WHITE (FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE)
+#define CONSOLECOLOR(x) SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), x);
+#define ERROR(x) CONSOLECOLOR(FOREGROUND_RED); std::cout << x << std::endl; CONSOLECOLOR(FOREGROUND_WHITE); DebugBreak();
+#define WARN(x) CONSOLECOLOR(FOREGROUND_RED | FOREGROUND_GREEN); std::cout << x << std::endl; CONSOLECOLOR(FOREGROUND_WHITE);
+#define BIT(x) 1 << (x - 1)
+#define DEBUG 1//unused atm since we have an error hook with glfw and don't need to paste CHECKERROR() macros (todo: implement CHECKERROR() macros) 
+
+namespace Engine {
+	void CheckGLError(const char*); //defined in renderer.cpp
+	bool BigEndian();
+}
+
+#endif
+
+#pragma once
+
+#ifndef __ROOTDIR
+#define __ROOTDIR "../../"
+#endif
+
+#include "core.h"
+#include "Engine/Src/win_window.h"
+#include "renderer.h"
+#include "application.h"
+#include "EventHandler.h"
+#include "gl_shader.h"
+
+#include "Event.h"
+#include <iostream>
+
+namespace Engine {
+	Listener::Listener(Callback c) : m_callback(c) {}
+	Listener::~Listener() {}
+
+	void Listener::Fire(const EventData& e) {
+		m_callback(e);
+	}
+
+	Event::Event() : m_hooks(std::vector<std::shared_ptr<Listener>>{}) {
+		std::cout << "Event init" << std::endl;
+		std::cout << "Event hooks: " << m_hooks.size() << std::endl;
+	}
+	Event::~Event() {
+	}
+
+	void Event::Fire(const EventData& e) {
+		//std::cout << "Event::Fire " << e.eventflags << std::endl;
+		if (m_hooks.size() > 0 && !m_hooks.empty()) {
+			for (auto it = m_hooks.begin(); it != m_hooks.end(); it++) {
+				(*it)->Fire(e);
+			}
+		}
+	}
+
+	std::shared_ptr<Listener> Event::Connect(Callback c) {
+		std::shared_ptr<Listener> l = std::make_shared<Listener>(c);
+		m_hooks.push_back(l);
+		return l;
+	}
+
+	void Event::Disconnect(std::shared_ptr<Listener>& l) {
+		for (auto it = m_hooks.begin(); it != m_hooks.end(); ) {
+			if ((*it) == l) {
+				m_hooks.erase(it);
+				return;
+			}
+			else
+			{
+				it++;
+			}
+		}
+		std::cout << "FAILED TO DISCONNECT!? Event.cpp" << std::endl;
+	}
+}
+
+#pragma once
+
+#include <functional>
+#include <list>
+
+#define BIT(x) 1 << x
+
+#define EVENT_KEYDOWN 0
+#define EVENT_KEYUP 1
+#define EVENT_MOUSEBUTTON 2
+#define EVENT_MOUSEMOVE 3
+#define EVENT_MOUSESCROLL 4
+#define EVENT_WINDOWRESIZE 5
+#define EVENT_WINDOWCLOSE 6
+#define EVENT_CHAR 7
+//..
+
+#define EVENT_UNDEFINED 8//The first free flag for custom events to be defined
+
+#define EVENTFLAGSTYPE uint32_t
+
+//not threadsafe
+namespace Engine {
+	
+	struct KeyEventInfo {
+		int32_t key;
+		int32_t scancode;
+		int32_t action;
+		int32_t mods;
+	};
+
+	struct MouseButtonEventInfo {
+		int32_t button;
+		int32_t action;
+		int32_t mods;
+	};
+
+	struct MouseMoveEventInfo {
+		double xpos;
+		double ypos;
+	};
+
+	struct MouseScrollEventInfo {
+		double dX;
+		double dY;
+	};
+
+	struct WindowResizeEventInfo {
+		uint32_t width;
+		uint32_t height;
+	};
+
+	struct CharEventInfo {
+		uint16_t character; //holds 1 ascii char and then a null terminator aka 2 char string
+	};
+
+	struct EventData {
+		EVENTFLAGSTYPE eventflags; //overkill but allows sufficient space for expansion of event implementation
+		union {
+			KeyEventInfo ki;
+			MouseButtonEventInfo mbi;
+			MouseMoveEventInfo mmi;
+			MouseScrollEventInfo msi;
+			WindowResizeEventInfo wri;
+			CharEventInfo ci;
+		} eventinfo;
+		std::function<void(const EventData&)> nexthook;
+	};
+	//Maybe unions are a bit cursed.
+
+	using Callback = std::function<void(const EventData&)>;
+
+	class Listener
+	{
+	public:
+		Listener(Callback);
+		~Listener();
+		
+		void Fire(const EventData&);
+	private:
+		Callback m_callback;
+	};
+
+	class Event
+	{
+	public:
+		Event();
+		~Event();
+
+		void Fire(const EventData&);
+		std::shared_ptr<Listener> Connect(Callback);
+		void Disconnect(std::shared_ptr<Listener>&);
+
+	private:
+		std::vector<std::shared_ptr<Listener>> m_hooks;
+	};
+}
+
+#include "EventHandler.h"
+#include <iostream>
+#include "core.h"
+
+Engine::EventHandler::EventHandler() : m_events(new Event*[sizeof(EVENTFLAGSTYPE)*8]) {
+	for (int i = 0; i < sizeof(EVENTFLAGSTYPE)*8; i++) {
+		std::cout << i;
+		m_events[i] = new Event(); //I think the copy-assignment is causing memory issues with the pointers inside the Event list object
+	}
+}
+Engine::EventHandler::~EventHandler() {
+	for (auto i = 0; i < sizeof(EVENTFLAGSTYPE)*8; i++) { 
+		delete m_events[i];
+	}
+}
+
+void Engine::EventHandler::Fire(const EventData& e) {
+	for (unsigned int i = 0; i < m_eventoffs; i++) {
+		if (e.eventflags == i) {
+			m_events[i]->Fire(e);
+			//std::cout << "EVENT: " << i << std::endl;
+		}
+	}
+}
+
+uint8_t Engine::EventHandler::AddEvent(Event* e) {
+	if (m_eventoffs >= sizeof(EVENTFLAGSTYPE)*8) {
+		std::cout << "Event flags overflow" << std::endl;
+		return -1;
+	}
+	m_events[m_eventoffs] = e;
+	m_eventoffs++;
+	return m_eventoffs-1;
+}
+
+Engine::Event* Engine::EventHandler::GetEvent(int idx) {
+	if (idx >= sizeof(EVENTFLAGSTYPE) * 8) {
+		ERROR("Attempt to index EventHandler event at " << idx);
+	}
+	return m_events[idx]; 
+}
+
+#pragma once
+#include <vector>
+#include <functional>
+
+#include "Event.h"
+
+namespace Engine {
+	class EventHandler
+	{
+	public:
+		EventHandler();
+		~EventHandler();
+
+		void Fire(const EventData&);
+		uint8_t AddEvent(Event* e);
+		Event* GetEvent(int idx); //gets event from the internal event ptr array
+	private:
+		uint32_t m_eventoffs = EVENT_UNDEFINED;
+		Event** m_events;
+	};
+}
+
+#include "gl_buffer.h"
+
+namespace Engine {
+	gl_buffer::gl_buffer() : m_head(0), m_content_size(0) {}
+	gl_buffer::~gl_buffer() {}
+	GLuint gl_buffer::s_bound_buffer = 0;
+
+
+}
+
+#pragma once
+#include "core.h"
+namespace Engine {
+	class gl_buffer
+	{
+	protected:
+		GLintptr m_head; //end of buffer contents
+		GLsizeiptr m_content_size; //size(bytes) of buffer data
+		static GLuint s_bound_buffer;
+	public:
+		gl_buffer();
+		~gl_buffer();
+
+		virtual void clear() = 0;
+		virtual void bind() = 0;
+		virtual void push_back(size_t data_size, const void* data) = 0;
+		virtual void overwrite(size_t size, GLintptr offs, const void* data) = 0;
+		virtual bool empty() = 0;
+	};
+}
+
+#include "gl_shader.h"
+#include <fstream>
+#include <vector>
+
+namespace Engine {
+	std::shared_ptr<gl_shader> gl_shader::s_bound_shader;
+	std::map<std::string, std::shared_ptr<gl_shader>> gl_shader::s_shaders{};
+
+	GLuint gl_shader::load_shader(const char* path, GLenum shader_type) {
+		/*
+		Given a relative path from the SolutionDir and a shader type (e.g. GL_VERTEX_SHADER) loads the shader source and compiles
+		returns -1 if failed
+		returns the shader GLuint driver handle if succesful 
+
+		read:
+		www.khronos.org/opengl/wiki/Shader_Compilation
+		*/
+		
+		GLuint shader = glCreateShader(shader_type);
+
+		std::string shader_source = "";
+		{
+			std::ifstream ifs;
+			ifs.exceptions(std::ios_base::badbit | std::ios_base::failbit); //set badbit and fialbit exceptions
+
+			try {
+				ifs.open(path);
+
+				auto size = ifs.gcount();
+
+				ifs.clear();
+				ifs.seekg(0, std::ios_base::beg);
+
+				shader_source = std::string{ std::istreambuf_iterator<char>{ifs}, {} };
+			}
+			catch (const std::ifstream::failure& e) {
+				ERROR("gl_shader.cpp::" << path << " - " << e.code() << ": " << e.what());
+			}
+			//scoped objects cleaned up by lifetime
+
+			ifs.close();
+			//clean up file handle
+		}
+
+		const char* k = shader_source.c_str();
+		glShaderSource(shader, 1, &k, 0);
+
+		glCompileShader(shader);
+
+		GLint status = 0;
+		glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+		if (status == GL_FALSE) {
+			GLint length = 0;
+			glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+
+			std::vector<GLchar> log(length);
+			glGetShaderInfoLog(shader, length, &length, &log[0]);
+
+			glDeleteShader(shader);
+
+			ERROR("gl_shader.cpp::gl_shader::load_shader: " << path << ": " << &log[0]);
+
+			return -1;
+		}
+		else
+		{
+			return shader;
+		}
+	}
+
+	void gl_shader::create_shader(std::string name, const char* vpath, const char* fpath) {
+		std::shared_ptr<gl_shader> shader = std::make_shared<gl_shader>(name, vpath, fpath);
+		s_shaders.emplace(std::pair<std::string, std::shared_ptr<gl_shader>>(name, shader));
+	}
+
+	gl_shader::gl_shader(std::string name, const char* vpath, const char* fpath) : m_program(glCreateProgram()), m_valid(false), m_shaders({}), m_name(name) {
+		
+		GLuint vertex_shader = load_shader(vpath, GL_VERTEX_SHADER);
+		if (vertex_shader == -1) {
+			ERROR("gl_shader.cpp::gl_shader() Failed to load vertex shader " << vpath);
+		}
+		else
+		{
+			GLuint fragment_shader = load_shader(fpath, GL_FRAGMENT_SHADER);
+			if (fragment_shader == -1) {
+				ERROR("gl_shader.cpp::gl_shader() Failed to load fragment shader " << vpath);
+			}
+			else
+			{
+
+				glAttachShader(m_program, vertex_shader);
+				glAttachShader(m_program, fragment_shader);
+				glLinkProgram(m_program);
+
+				//after linking (success or no) detach the shaders from the gl state machine (We're done with them) 
+				glDetachShader(m_program, vertex_shader);
+				glDetachShader(m_program, fragment_shader);
+
+				GLint linked = 0;
+				glGetProgramiv(m_program, GL_LINK_STATUS, (int*)&linked);
+				if (linked == GL_FALSE) {
+					ERROR("gl_shader::gl_shader link error (status " << linked << ")");
+
+					GLint len = 0;
+					GLsizei msglen = 0;
+					glGetProgramiv(m_program, GL_INFO_LOG_LENGTH, &len);
+					//std::cout << len << std::endl;
+
+					GLchar *msg = new GLchar[len];
+					glGetProgramInfoLog(m_program, len, &msglen, msg); //dont care about the size returned, cout deals with that crap, guess I should worry about debugging internal gl driver memcpy to the vector and the vector not resizing... (bad code!!)
+					ERROR("gl_shader.cpp::gl_shader() link error: " << msg);
+
+					glDeleteProgram(m_program);
+				}
+				else
+				{
+					//if all shader load succesful and link succesful, set valid to true 
+					m_valid = true;
+					WARN("Shader " << m_name << " generated with id " << m_program);
+				}
+				glDeleteShader(vertex_shader);
+				glDeleteShader(fragment_shader);
+			}
+		}
+	}
+
+	gl_shader::~gl_shader() {
+		/*for (auto shdr : m_shaders) {
+			//glDetachShader(m_program, shdr);
+			
+			//todo: check shader deleted
+		}*/
+		if (s_bound_shader.get() == this) {
+			unbind();
+		}
+		glDeleteProgram(m_program);
+		WARN("gl_shader.cpp::gl_shader::~gl_shader() destroyed shader '" << m_name << "' object at " << std::hex << this);
+	}
+
+	void gl_shader::bind() {
+		if (m_valid == false) {
+			ERROR("gl_shader.cpp::gl_shader::bind() Attempt to bind invalid shader program (loaded incorrectly)");
+			return;
+		}
+
+		CheckGLError("gl_shader::bind before glUseProgram(m_program)");
+		glUseProgram(m_program);
+		std::shared_ptr<gl_shader> shader = get_shader(this->name());
+		s_bound_shader = shader;
+		CheckGLError("gl_shader::bind glUseProgram(m_program)");
+		//std::cout << "gl_shader.cpp: bound shader '" << m_name << "' with ID " << m_program << std::endl;
+	}
+
+	void gl_shader::unbind() {
+		glUseProgram(0);
+		s_bound_shader = nullptr;
+	}
+
+	const std::string& gl_shader::name() {
+		return m_name;
+	}
+
+	GLint gl_shader::get_uniform_location(const char* name) {
+		if (s_bound_shader.get() != this) {
+			WARN("gl_shader.cpp: Accessing uniform '" << name <<  "' of non-bound shader object '" << m_name);
+		}
+
+		CheckGLError("gl_shader::get_uniform_location before glGetUniformLocation call");
+
+		GLint x = glGetUniformLocation(m_program, name);
+		if (x == -1) {
+			ERROR("gl_shader.cpp:: Could not find uniform '" << name << "' in shader '" << s_bound_shader->name() << "'" << " glError: " << glGetError());
+			return -1;
+		}
+		else
+		{
+			return x;
+		}
+
+		CheckGLError("gl_shader::get_uniform_location after glGetUniformLocation call");
+	}
+
+	void gl_shader::set_uniform1i(const char* name, GLint val) {
+		GLint loc = get_uniform_location(name);
+		if (loc != -1) {
+			glUniform1i(loc, val);
+		}
+	}
+
+	void gl_shader::set_uniform1f(const char* name, GLfloat val) {
+		GLint loc = get_uniform_location(name);
+		if (loc != -1) {
+			glUniform1f(loc, val);
+		}
+	}
+
+	void gl_shader::set_uniform1b(const char* name, GLboolean val) {
+		GLint loc = get_uniform_location(name);
+		if (loc != -1) {
+			glUniform1i(loc, val);
+		}
+	}
+
+	void gl_shader::set_uniform2f(const char* name, const glm::vec2& val) {
+		GLint loc = get_uniform_location(name);
+		if (loc != -1) {
+			glUniform2f(loc, val.x, val.y);
+		}
+	}
+
+	void gl_shader::set_uniform3f(const char* name, const glm::vec3& val) {
+		GLint loc = get_uniform_location(name);
+		if (loc != -1) {
+			glUniform3f(loc, val.x, val.y, val.z);
+		}
+	}
+
+	void gl_shader::set_uniform4f(const char* name, const glm::vec4& val) {
+		GLint loc = get_uniform_location(name);
+		if (loc != -1) {
+			glUniform4f(loc, val.x, val.y, val.z, val.w);
+		}
+	}
+
+	void gl_shader::set_uniform_mat4f(const char* name, const glm::mat4& val) {
+		GLint loc = get_uniform_location(name);
+		if (loc != -1) {
+			glUniformMatrix4fv(loc, 1, false, glm::value_ptr(val));
+		}
+	}
+
+	std::shared_ptr<gl_shader> gl_shader::get_shader(const std::string& name) {
+		auto it = s_shaders.find(name);
+		if (it != s_shaders.end()) {
+			//std::cout << "gl_shader::get_shader() found shader '" << name << "'" << std::endl;
+			return (*it).second;
+		}
+		else
+		{
+			ERROR("gl_shader::get_shader(): Failed to find shader with name '" << name << "'");
+		}
+	}
+
+	void gl_shader::exit() {
+		s_shaders.clear();
+	}
+}
+
+#pragma once
+#include "core.h"
+#include <map>
+#include <vector>
+
+namespace Engine {
+	class gl_shader
+	{
+	public:
+		gl_shader(std::string name, const char* vpath, const char* fpath); //DO NOT CALL, use gl_shader::create_shader, method only public since used by create_shared call
+		~gl_shader();
+
+		void bind();
+		void unbind();
+		const std::string& name();
+
+		void set_uniform1i(const char* name, GLint value);
+		void set_uniform1f(const char* name, GLfloat value);
+		void set_uniform1b(const char* name, GLboolean value);
+		void set_uniform2f(const char* name, const glm::vec2& vec);
+		void set_uniform3f(const char* name, const glm::vec3& vec);
+		void set_uniform4f(const char* name, const glm::vec4& vec);
+		void set_uniform_mat4f(const char* name, const glm::mat4& mat);
+
+		static std::shared_ptr<gl_shader> get_shader(const std::string& name);
+		static void create_shader(std::string name, const char* vpath, const char* fpath); 
+		static void exit();
+
+		static std::shared_ptr<gl_shader> s_bound_shader; //DONT MODIFY THIS FFS BUT IT CANT BE CONST
+
+	private:
+		
+		//copy name since it may be scoped and destructed 
+
+		GLuint m_program;
+		const std::string m_name;
+		bool m_valid;
+
+		std::vector<GLuint> m_shaders;
+
+		static std::map<std::string, std::shared_ptr<gl_shader>> s_shaders;
+
+		GLuint load_shader(const char* path, GLenum shader_type);
+		GLint get_uniform_location(const char* name);
+	};
+}
+
+#pragma once
+
+#pragma comment(lib, "liblua53.a")
+
+extern "C" {
+	#include "lua.h"
+	#include "lauxlib.h"
+	#include "lualib.h"
+}
+
+#include "renderer.h"
+#include "gl_shader.h"
+#include "core.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+
+namespace Engine {
+	void CheckGLError(const char* desc) {
+		int error = glGetError();
+		if (error) {
+			ERROR(std::dec << desc << " glError: 0x" << std::hex << error);
+		}
+	}
+
+	bool BigEndian() {
+		uint32_t _endiantest = 0xFF000000;
+		return (uint8_t)((uint8_t*)(&_endiantest)[0]) == 0xFF;
+	}
+
+	renderer::renderer() :
+		m_rect_VAO(gen_vao()),
+		m_filled_rect_VAO(gen_vao()),
+		m_text_VAO(gen_vao()),
+		m_chart_VAO(gen_vao()),
+		m_rect_vbo(std::make_shared<vertex_buffer>()),
+		m_filled_rect_vbo(std::make_shared<vertex_buffer>()),
+		m_text_vbo(std::make_shared<vertex_buffer>(1 << 24)),
+		m_active_buffer(m_rect_vbo),
+		last_border_size(0),
+		m_viewport_size(glm::vec2(800, 600)),
+		m_characterdata(std::map<char, character>{}),
+		m_text_local_data(std::vector<TextParams>{})
+	{
+		m_text_local_data.reserve(2048 * sizeof(TextParams)); //Fairly generous allocation of space for 2048 characters of text in the frame
+		FT_Library ft;
+		if (FT_Init_FreeType(&ft)) {
+			ERROR("renderer::renderer() failed to initialize FreeType")
+		}
+
+		FT_Face face;
+		if (FT_New_Face(ft, "fonts/arial.ttf", 0, &face)) {
+			ERROR("Failed to load font 'arial.ttf' with error:");
+		}
+		else
+		{
+			FT_Set_Pixel_Sizes(face, 0, 64);
+			
+			GLint v;
+			glGetIntegerv(GL_UNPACK_ALIGNMENT, &v);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+			glGenTextures(1, &m_font_texture);
+
+			uint32_t max_dim = (1 + (face->size->metrics.height >> 5)) * ceilf(sqrtf(128));
+			int tex_width = 512;
+			while (tex_width < max_dim) tex_width <<= 1; //multiply the width by 2
+			int tex_height = tex_width;
+
+			char* pixels = new char[(tex_width * tex_height)];
+			memset(pixels, 0, tex_width * tex_height);
+			glm::ivec2 pen_pos{ 0,0 };
+
+			FT_Select_Charmap(face, FT_ENCODING_UNICODE);
+
+			FT_UInt index;
+			FT_ULong c = FT_Get_First_Char(face, &index);
+			FT_Error err;
+			while (index) {
+				err = FT_Load_Char(face, c, FT_LOAD_RENDER);
+				if (err != 0) {
+					ERROR("Failed to load glyph, error: " << err);
+					err = 0;
+				}
+
+				if (pen_pos.x + face->glyph->bitmap.width + 1 >= tex_width) {
+					pen_pos.x = 0;
+					pen_pos.y += ((face->size->metrics.height >> 6) + 1);
+				}
+
+				if (face->glyph->bitmap.width > 0) {
+
+					for (int row = 0; row < face->glyph->bitmap.rows; row++) {
+						for (int col = 0; col < face->glyph->bitmap.width; col++) {
+							glm::ivec2 xy = pen_pos + glm::ivec2(col, row);
+							pixels[(xy.y+1) * tex_width + xy.x] = face->glyph->bitmap.buffer[row * face->glyph->bitmap.pitch + col];
+						}
+					}
+				}
+				else
+				{
+					WARN("renderer::renderer() font arial.ttf missing glyph bitmap for char " << c);
+				}
+				character k;
+				k.size = glm::vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
+				k.uv_topleft = ((glm::vec2)pen_pos + glm::vec2(0.f, 0.f))/ glm::vec2(tex_width, tex_height);
+				k.uv_topright = ((glm::vec2)pen_pos + glm::vec2(k.size.x, 0.f)) / glm::vec2(tex_width, tex_height);
+				k.uv_bottomleft = ((glm::vec2)pen_pos + glm::vec2(0.f, k.size.y + 1.f)) / glm::vec2(tex_width, tex_height);
+				k.uv_bottomright = ((glm::vec2)pen_pos + k.size + glm::vec2(0.f, 1.f)) / glm::vec2(tex_width, tex_height);
+				/*k.uv_topleft = glm::vec2(0, 0);
+				k.uv_topright = glm::vec2(1, 0);
+				k.uv_bottomleft = glm::vec2(0, 1);
+				k.uv_bottomright = glm::vec2(1, 1);*/
+				k.bearing = glm::vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
+				k.advance = face->glyph->advance.x >> 6;
+				m_characterdata.emplace(std::pair<char, character>{c, k});
+
+				pen_pos.x += face->glyph->bitmap.width + 1;
+				
+				c = FT_Get_Next_Char(face, c, &index);
+			}
+			
+			glBindTexture(GL_TEXTURE_2D, m_font_texture);
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, tex_width, tex_height, 0, GL_RED, GL_UNSIGNED_BYTE, pixels);
+			//glGenerateMipmap(GL_TEXTURE_2D);
+
+			//stbi_write_bmp("TextAtlas.bmp", tex_width, tex_height, 1, pixels);
+
+			glBindTexture(GL_TEXTURE_2D, 0);
+			
+
+			FT_Done_FreeType(ft);
+			delete[] pixels;
+
+			glPixelStorei(GL_UNPACK_ALIGNMENT, v);
+		}
+		
+		CheckGLError("wtf");
+
+		bind_vao(m_rect_VAO);
+		bind_buffer(m_rect_vbo);
+		//set up the vertex attrib ptrs for the rect vbo 
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(rect_vert), 0);
+
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(GLfloat) * 3) );
+
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(float) * 5));
+
+		//as per OpenGL 4.3 Khronos spec, glGetVertexAttribPointerv queries the Vertex Array Object (VAO state carries VertexAttribPointers, i.e reuse indices for separate VAOs)
+		bind_vao(m_filled_rect_VAO);
+		bind_buffer(m_filled_rect_vbo);
+		//set up the vertex attrib ptrs for the filled rect vbo
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(rect_vert), 0);
+
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(GLfloat) * 3));
+
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(float) * 5));
+
+		bind_vao(m_text_VAO);
+		bind_buffer(m_text_vbo);
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(rect_vert), 0);
+
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(GLfloat) * 3));
+
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(float) * 5));
+
+		Engine::CheckGLError("Before chart VAO");
+
+		bind_vao(m_chart_VAO);
+		Engine::CheckGLError("chart vao 1");
+		glCreateBuffers(1, &m_chart_vbo);
+		Engine::CheckGLError("chart vao 2");
+		glBindBuffer(GL_ARRAY_BUFFER, m_chart_vbo);
+
+		Engine::CheckGLError("After create chart VAO");
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(rect_vert), 0);
+
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(GLfloat) * 3));
+
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_TRUE, sizeof(rect_vert), (void*)(sizeof(float) * 5));
+
+		Engine::CheckGLError("After init chart vao");
+
+		bind_vao(m_candle_VAO);
+		glCreateBuffers(1, &m_candle_vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, m_candle_vbo);
+		glBufferData(GL_ARRAY_BUFFER, 1 << 26, 0, GL_DYNAMIC_DRAW); //1 << 26 is enough space for 10 years worth of per minute data
+
+		Engine::CheckGLError("After init candle vao & vbo");
+
+		struct candlevert {
+			glm::vec3 pos;
+		};
+
+		candlevert bl{ glm::vec3(-.5f, -.5f, 0.f)};
+		candlevert br{ glm::vec3(.5f, -.5f, 0.f)};
+		candlevert tl{ glm::vec3(-.5f, .5f, 0.f)};
+		candlevert tr{ glm::vec3(.5f, .5f, 0.f)};
+
+		candlevert rect[6]{tl, bl, tr, tr, bl, br};
+
+		glNamedBufferSubData(m_candle_vbo, 0, 6 * sizeof(candlevert), rect);
+
+		CheckGLError("After init candle vao & vbo data");
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(candlevert), 0);
+
+		glEnableVertexAttribArray(1);
+		glVertexAttribDivisor(1, 1); //instanced attrib
+		glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(RenderCandleInfo), (void*)(sizeof(candlevert) * 6));
+
+		CheckGLError("After per instance OHLC");
+
+		glEnableVertexAttribArray(2);
+		glVertexAttribDivisor(2, 1); //instanced attrib
+		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(RenderCandleInfo), (void*)(sizeof(candlevert) * 6 + 4 * sizeof(GL_FLOAT)));
+
+		CheckGLError("After per instance volume");
+	}
+
+	void renderer::write_candle_gpu_data(void* data, size_t size) {
+		glNamedBufferSubData(m_candle_vbo, 6 * sizeof(glm::vec3), size, data);
+	}
+
+	void renderer::draw_candles(int count, const glm::mat4& projection) {
+		bind_vao(m_candle_VAO);
+		glBindBuffer(GL_ARRAY_BUFFER, m_candle_vbo);
+
+		std::shared_ptr<gl_shader> shader;
+		shader = Engine::gl_shader::get_shader("candlebody");
+		shader->bind();
+		shader->set_uniform_mat4f("projection", projection);
+		glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+
+		shader = Engine::gl_shader::get_shader("candlevolume");
+		shader->bind();
+		shader->set_uniform_mat4f("projection", projection);
+		glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+
+		shader = Engine::gl_shader::get_shader("candlewick");
+		shader->bind();
+		shader->set_uniform_mat4f("projection", projection);
+		glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+	}
+
+	renderer::~renderer() {
+		WARN("renderer::~renderer() Renderer instance destroyed");
+	}
+
+	std::shared_ptr<renderer>& renderer::get_instance() {
+		static std::shared_ptr<renderer> instance(new renderer());
+		return instance; //returns ref to the shared ptr so a copy op will fire on assignment to shared_ptr but I can assing to a shared_ptr& to access the static original and reset it to delete the instance.
+	}
+
+	std::shared_ptr<gl_shader> renderer::active_shader() {
+		return gl_shader::s_bound_shader;
+	}
+
+	void renderer::bind_buffer(std::shared_ptr<gl_buffer> buffer) {
+		buffer->bind();
+		m_active_buffer = buffer;
+		CheckGLError("renderer::bind_buffer");
+	}
+
+	void renderer::bind_shader(std::shared_ptr<gl_shader> shader) {
+		shader->bind();
+		CheckGLError("renderer::bind_shader");
+	}
+
+	GLuint renderer::gen_vao() {
+		//generates and binds a Vertex Array object
+		GLuint handle = 0;
+		glGenVertexArrays(1, &handle);
+		bind_vao(handle);
+		return handle;
+	}
+
+	void renderer::bind_vao(GLuint vao) {
+		glBindVertexArray(vao);
+		m_active_VAO = vao;
+	}
+
+	void renderer::push_rect(RectParams c) {
+
+		CheckGLError("renderer::push_rect before");
+		
+		if (m_active_VAO != m_rect_VAO) {
+			bind_vao(m_rect_VAO);
+		}
+
+		if (m_active_buffer != m_rect_vbo) {
+			bind_buffer(m_rect_vbo);
+		}
+
+		if (c.border != last_border_size) {
+			if (last_border_size != -1 && !m_rect_vbo->empty()) {
+				WARN("auto draw rects: vbo->content_size() = " << std::dynamic_pointer_cast<vertex_buffer>(m_active_buffer)->content_size() << " bytes; " << std::dynamic_pointer_cast<vertex_buffer>(m_active_buffer)->content_size() / sizeof(rect_data) << " rects");
+				draw_rects();
+			}//draw rects when border size uniform changes 
+			last_border_size = c.border;
+			WARN("auto change border size: last_border_size = " << last_border_size << " vbo->empty() = " << m_rect_vbo->empty());
+			glLineWidth(static_cast<float>(c.border));
+			CheckGLError("renderer::push_rect after glLineWidth");
+		}
+		//return;
+
+		rect_vert tl{ glm::vec3(c.x,c.y,c.z), glm::vec2(0.f,0.f), c.color };
+		rect_vert tr{ glm::vec3(c.x + c.width, c.y, c.z), glm::vec2(1.f,0.f), c.color };
+		rect_vert bl{ glm::vec3(c.x, c.y + c.height, c.z ), glm::vec2(0.f, 1.f), c.color };
+		rect_vert br{ glm::vec3(c.x + c.width, c.y + c.height, c.z ), glm::vec2(1.f,1.f), c.color };
+
+		rect_data data{
+			tl, tr, br, bl
+		};
+		//std::cout << "renderer::push_rect() m_rect_vbo->push_back(" << std::dec << sizeof(data) << ", " << std::hex << &data << ")" << std::endl;
+		m_rect_vbo->push_back(sizeof(data), &data);
+
+		CheckGLError("renderer::push_rect after");
+	}
+
+	void renderer::draw_rects() {
+		//std::cout << "renderer::draw_rects()" << std::endl;
+
+		//draw code
+		CheckGLError("renderer::draw_rects() before glBindVertexArray");
+
+		if (m_active_VAO != m_rect_VAO) {
+			bind_vao(m_rect_VAO); //m_rect_vbo buffer should be inferred
+			bind_buffer(m_rect_vbo);
+		}
+
+		std::shared_ptr<Engine::gl_shader> p_shader = Engine::gl_shader::get_shader("rect");
+		if (p_shader != nullptr && p_shader != gl_shader::s_bound_shader) {
+			bind_shader(p_shader);
+		}
+		//std::cout << "screenDim " << m_viewport_size.x << ", " << m_viewport_size.y << std::endl;
+		p_shader->set_uniform2f("screenDim", m_viewport_size);
+
+		//glLineWidth(static_cast<float>(last_border_size));
+		CheckGLError("renderer::draw_rects() glLineWidth");
+		
+		//std::cout << "m_rect_vbo->content_size() " << m_rect_vbo->content_size() << " bytes" << std::endl;
+		for (int i = 0; i < m_rect_vbo->content_size() / sizeof(rect_data); i++) {
+			glDrawArrays(GL_LINE_LOOP, i * 4, 4);
+			//std::cout << "renderer::draw_rects() DrawArrays GL_LINE_LOOP, " << std::dec << i * 4  <<", 4" << std::endl;
+		}
+		CheckGLError("renderer::draw_rects() glDrawArrays");
+
+		//glFinish(); not necessary to sync (await async gpu draw calls to find) since we clear buffer by orphaning
+		m_rect_vbo->debug();
+
+		//cleanup after
+		m_rect_vbo->clear();
+	}
+
+	void renderer::push_filled_rect(FilledRectParams f) {
+		//std::cout << "renderer::push_filled_rect rgba = " << std::dec << glm::to_string(rgba) << std::endl;
+		CheckGLError("renderer::push_filled_rect before");
+
+		if (m_active_VAO != m_filled_rect_VAO) {
+			bind_vao(m_filled_rect_VAO);
+		}
+		if (m_active_buffer != m_filled_rect_vbo) {
+			bind_buffer(m_filled_rect_vbo);
+		}
+
+		rect_vert tl{ glm::vec3(f.x,f.y,f.z), glm::vec2(0.f, 0.f), f.color };
+		rect_vert tr{ glm::vec3(f.x + f.width,f.y,f.z), glm::vec2(1.f, 0.f), f.color };
+		rect_vert bl{ glm::vec3(f.x,f.y + f.height,f.z), glm::vec2(0.f, 1.f), f.color };
+		rect_vert br{ glm::vec3(f.x + f.width,f.y + f.height,f.z), glm::vec2(1.f, 1.f), f.color };
+
+		filled_rect_data data{
+			tl, bl, tr,
+			tr, bl, br
+		};
+
+		m_filled_rect_vbo->push_back(sizeof(data), &data);
+
+		//draw_text(std::to_string(z), x + w, y + h, z, 100, 20, 12, glm::vec4(1.f, 1.f, 1.f, 1.f), false, false);
+	}
+
+	void renderer::draw_filled_rects() {
+		CheckGLError("renderer::draw_filled_rects() before");
+
+		if (m_active_VAO != m_filled_rect_VAO) {
+			bind_vao(m_filled_rect_VAO);
+		}
+		if (m_active_buffer != m_filled_rect_vbo) {
+			bind_buffer(m_filled_rect_vbo);
+		}
+
+		std::shared_ptr<Engine::gl_shader> p_shader = Engine::gl_shader::get_shader("rect");
+		if (p_shader != nullptr && p_shader != active_shader()) {
+			bind_shader(p_shader);
+		}
+		//std::cout << "screenDim " << m_viewport_size.x << ", " << m_viewport_size.y << std::endl;
+		p_shader->set_uniform2f("screenDim", m_viewport_size);
+
+		//std::cout << "glDrawArrays(GL_TRIANGLES, 0, " << m_filled_rect_vbo->content_size() / sizeof(rect_vert) << ");" << std::endl;
+		glDrawArrays(GL_TRIANGLES, 0, m_filled_rect_vbo->content_size()/sizeof(rect_vert));
+		CheckGLError("renderer::draw_filled_Rects() glDrawArrays");
+
+		m_filled_rect_vbo->debug();
+		m_filled_rect_vbo->clear();//orphan buffer(implicit sync -> sync safe)
+
+		CheckGLError("renderer::draw_filled_rects() after");
+	}
+
+	void renderer::push_text(const TextParams& t) {
+		m_text_local_data.push_back(t);
+	}
+
+	void renderer::draw_text() {
+
+		if (m_active_VAO != m_text_VAO) {
+			bind_vao(m_text_VAO);
+		}
+		std::shared_ptr<gl_shader> shader = gl_shader::get_shader("text");
+		if (active_shader() != shader) {
+			bind_shader(shader);
+		}
+		if (m_active_buffer != m_text_vbo) {
+			bind_buffer(m_text_vbo);
+		}
+		//std::cout << "screenDim " << m_viewport_size.x << ", " << m_viewport_size.y << std::endl;
+		shader->set_uniform2f("screenDim", m_viewport_size);
+		//slot 0
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, m_font_texture);
+		shader->set_uniform1i("atlas", 0);
+
+		std::vector<filled_rect_data> frame_text_data{};
+		frame_text_data.reserve(50 * sizeof(filled_rect_data));
+
+		for (auto itext : m_text_local_data) {
+			frame_text_data.clear();
+
+			float size = (float)itext.size / 48.f;
+
+			glm::ivec2 cursor{ itext.x ,itext.y + itext.size };
+
+			for (auto it = itext.s.cbegin(); it != itext.s.cend(); it++) {
+				char k = (*it);
+				auto _c = m_characterdata.find(k);
+
+				if ((int)k == (int)'\n') {
+					cursor.x = itext.x;
+					cursor.y += itext.size;
+				}
+				else if (_c != m_characterdata.end()) {
+					character c = _c->second;
+					if (cursor.x + (c.advance - c.bearing.x) * size >= (itext.width + itext.x) && k != (char)32 && itext.wrap) {
+						cursor.x = itext.x;
+						cursor.y += itext.size + 15.f * size;
+					}
+
+					float x1 = cursor.x + c.bearing.x * size;
+					float y1 = cursor.y - (c.bearing.y) * size;
+					float x2 = x1 + c.size.x * size;
+					float y2 = y1 + c.size.y * size;
+
+					glm::vec3 tl{ x1, y1, itext.z };
+					glm::vec3 tr{ x2, y1, itext.z };
+					glm::vec3 bl{ x1, y2, itext.z };
+					glm::vec3 br{ x2, y2, itext.z };
+
+					filled_rect_data data{ //flip the y axis 
+						rect_vert{tl, c.uv_topleft, itext.color},
+						rect_vert{bl, c.uv_bottomleft, itext.color},
+						rect_vert{tr, c.uv_topright, itext.color},
+						rect_vert{tr, c.uv_topright, itext.color},
+						rect_vert{bl, c.uv_bottomleft, itext.color},
+						rect_vert{br, c.uv_bottomright, itext.color}
+					};
+
+					//m_text_vbo->push_back(sizeof(data), &data);
+					frame_text_data.push_back(data);
+
+					cursor.x += (float)(c.advance - c.bearing.x) * size;
+				}
+				else
+				{
+					ERROR("renderer::draw_text: Failed to find char " << (int)k << "(" << k << ")");
+				}
+			}
+
+			//std::cout << frame_text_data.size() << std::endl;
+			m_text_vbo->push_back(frame_text_data.size() * sizeof(filled_rect_data), &frame_text_data[0]);
+			//std::cout << "glDrawArrays(GL_TRIANGLES, 0, " << m_text_vbo->content_size() / sizeof(rect_vert) << ")" << std::endl;
+		}
+
+		glDrawArrays(GL_TRIANGLES, 0, m_text_vbo->content_size() / sizeof(rect_vert));
+		//m_text_vbo->debug();
+		m_text_vbo->clear();
+
+		
+
+		//glDepthMask(GL_TRUE);
+		//glFinish();
+		m_text_local_data.clear();
+		//glActiveTexture(0);
+	}
+
+	void renderer::draw_chart_rect(const glm::vec2& a, const glm::vec2& b) {
+		if (m_active_VAO != m_chart_VAO) {
+			bind_vao(m_chart_VAO);
+		}
+
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_DEPTH_TEST);
+
+		glm::vec2 s2 = get_viewport_size();
+		//std::cout << b.x << " " << b.y << " / " << s2.x << " " << s2.y << std::endl;
+		glm::vec2 p = a / s2;
+		glm::vec2 s = b / s2;
+
+		rect_vert tl{ glm::vec3(a.x, a.y, 0.f), glm::vec2(0.f, 1.f), glm::vec4(1.f)};
+		rect_vert tr{ glm::vec3(a.x + b.x, a.y, 0.f), glm::vec2(1.f, 1.f), glm::vec4(1.f)};
+		rect_vert bl{ glm::vec3(a.x, a.y + b.y, 0.f), glm::vec2(0.f, 0.f), glm::vec4(1.f)};
+		rect_vert br{ glm::vec3(a.x + b.x, a.y + b.y, 0.f), glm::vec2(1.f, 0.f), glm::vec4(1.f)};
+
+		filled_rect_data data{
+			tl, bl, tr,
+			tr, bl, br
+		};
+
+		glNamedBufferData(m_chart_vbo, sizeof(filled_rect_data), &data, GL_DYNAMIC_DRAW);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+
+		glEnable(GL_CULL_FACE);
+		glEnable(GL_DEPTH_TEST);
+	}
+
+	glm::vec2 renderer::get_text_bounds(const std::string& s, int32_t width, int32_t size) {
+		if (this == nullptr) {
+			return glm::vec2(0);
+		}
+		float _size = (float)size / 48.f;
+		float maxX = 0;
+
+		float lastwidth = 0;
+		float lastadvance = 0;
+		float lastbearing = 0;
+
+		glm::vec2 cursor{ 0, size };
+		for (auto it = s.cbegin(); it != s.cend(); it++) {
+			char k = *it;
+			auto cd = m_characterdata.find(k);
+			if ((int)k == (int)'\n') {
+				cursor.y = cursor.y + size + 15.f * _size;
+			}
+			else if (cd != m_characterdata.end()) {
+				float sx = cd->second.advance;
+				
+				float newX = cursor.x + sx *_size;
+
+				lastwidth = cd->second.size.x * _size;
+				lastadvance = cd->second.advance * _size;
+				lastbearing = cd->second.bearing.x * _size;
+
+				maxX = std::max(newX - lastadvance + lastwidth - lastbearing, maxX);
+				//std::cout << k << " " << maxX << std::endl;
+				if (newX > width) {
+					cursor.y += size + 15.f * _size;
+					cursor.x = 0;
+				}
+				else
+				{
+					cursor.x = newX;
+				}
+
+				
+			}
+		}
+
+		return glm::vec2(std::min((float)width, maxX), cursor.y + 15.f * _size);
+	}
+
+	glm::vec2 renderer::get_viewport_size() {
+		return m_viewport_size;
+	}
+
+	void renderer::set_viewport_size(int32_t width, int32_t height) {
+		m_viewport_size = glm::vec2(static_cast<float>(width), static_cast<float>(height));
+	}
+
+	void renderer::exit() {//static
+		if (shutdown) {
+			return;
+		}
+		std::shared_ptr<renderer>& refinst = get_instance();
+		refinst.reset();
+		shutdown = true;
+		WARN("renderer::exit()");
+	}
+
+	bool renderer::shutdown = false;
+
+}
+
+#pragma once
+#include "core.h"
+#include "gl_buffer.h"
+#include "gl_shader.h"
+#include "vertex_buffer.h"
+#include <map>
+
+namespace Engine {
+	struct rect_vert {
+		glm::vec3 pos;
+		glm::vec2 UV;
+		glm::vec4 rgba;
+	};
+
+	struct filled_rect_data {
+		rect_vert t00;
+		rect_vert t01;
+		rect_vert t02;
+		rect_vert t10;
+		rect_vert t11;
+		rect_vert t12;
+	};
+
+	struct rect_data {
+		rect_vert t00;
+		rect_vert t01;
+		rect_vert t02;
+		rect_vert t03;
+	};
+
+	struct character {
+		glm::vec2 bearing;
+		glm::vec2 size;
+		glm::vec2 uv_topleft;
+		glm::vec2 uv_topright;
+		glm::vec2 uv_bottomleft;
+		glm::vec2 uv_bottomright;
+		float advance;
+	};
+
+	struct RectParams {
+		int32_t x;
+		int32_t y;
+		int32_t width;
+		int32_t height;
+		int32_t z;
+		glm::vec4 color;
+		int32_t border;
+	};
+
+	struct FilledRectParams {
+		int32_t x;
+		int32_t y;
+		int32_t z;
+		int32_t width;
+		int32_t height;
+		glm::vec4 color;
+	};
+
+	struct ColorParams {
+		float_t r;
+		float_t g;
+		float_t b;
+		float_t a;
+	};
+
+	struct TextParams {
+		std::string s;
+		int32_t x;
+		int32_t y;
+		int32_t z;
+		int32_t width;
+		int32_t height;
+		int32_t size;
+		glm::vec4 color;
+		bool wrap;
+	};
+
+	struct RenderCandleInfo {
+		glm::vec4 ohlc;
+		float volume;
+	};
+
+	class renderer
+	{
+	private:
+		GLuint m_rect_VAO;
+		GLuint m_filled_rect_VAO;
+		GLuint m_text_VAO;
+		GLuint m_chart_VAO;
+		GLuint m_font_texture;
+		GLuint m_candle_VAO;
+
+		GLuint m_active_VAO;
+
+		std::shared_ptr<gl_buffer> m_active_buffer;
+		
+		std::shared_ptr<vertex_buffer> m_rect_vbo;
+		std::shared_ptr<vertex_buffer> m_filled_rect_vbo;
+		std::shared_ptr<vertex_buffer> m_text_vbo;
+		GLuint m_chart_vbo;
+		GLuint m_candle_vbo;
+
+		std::vector<TextParams> m_text_local_data; //local vector populated by push_rect stage
+
+		static bool shutdown;
+
+		void bind_buffer(std::shared_ptr<gl_buffer> buffer);
+		void bind_shader(std::shared_ptr<gl_shader> shader);
+		std::shared_ptr<gl_shader> active_shader();
+		GLuint gen_vao();
+
+		int32_t last_border_size;
+		glm::vec2 m_viewport_size;
+
+		FT_Library ft;
+		std::map<char, character> m_characterdata;
+		
+		//std::shared_ptr<TextRenderer> m_text_manager;
+		renderer();
+	public:
+		~renderer();
+		renderer(const renderer&) = delete;
+		renderer(const renderer&&) = delete;
+
+		static std::shared_ptr<renderer>& get_instance();
+
+		void bind_vao(GLuint vao);
+
+		//void SetRenderTarget();
+		void push_rect(RectParams);
+		void draw_rects();
+		void push_filled_rect(FilledRectParams);
+		void draw_filled_rects();
+		void push_text(const TextParams&);
+		void draw_text();
+		void set_viewport_size(int32_t width, int32_t height);
+		void draw_chart_rect(const glm::vec2& pos, const glm::vec2& size);
+		void write_candle_gpu_data(void* data, size_t size);
+		void draw_candles(int count, const glm::mat4& projection);
+
+		glm::vec2 get_viewport_size();
+		glm::vec2 get_text_bounds(const std::string& s, int32_t width, int32_t size);
+
+		static void exit(); 
+	};
+
+}
+
+#include "core.h"
+
+int main() {
+	return 0;
+}
+
+#pragma once
+
+#ifndef TIMER_H //if this file needs to be copied, or compiled with a GCC version prior to GCC 3.4, an ifndef guard is necessary
+#define TIMER_H 1
+
+#include <chrono>
+#include "core.h"
+
+namespace Engine {
+	//ended up doing the defs in-header since I intend to template the class for milliseconds or microseconds at some point, and the standard is to 
+	class timer
+	{
+	private:
+		std::chrono::time_point<std::chrono::high_resolution_clock> m_startTime;
+	public:
+		timer() {
+			m_startTime = std::chrono::high_resolution_clock::now();
+		}
+		~timer() {
+			stop();
+		}
+
+		void restart() {
+			m_startTime = std::chrono::high_resolution_clock::now();
+		}
+
+		void stop() {
+			auto endTime = std::chrono::high_resolution_clock::now();
+
+			auto start = std::chrono::time_point_cast<std::chrono::microseconds>(m_startTime).time_since_epoch().count();
+			auto end = std::chrono::time_point_cast<std::chrono::microseconds>(endTime).time_since_epoch().count();
+
+			auto duration = end - start;
+
+			CONSOLECOLOR(FOREGROUND_BLUE);
+			std::cout << duration << std::endl;
+			CONSOLECOLOR(FOREGROUND_WHITE);
+		}
+	};
+}
+#endif
+
+#include "vertex_buffer.h"
+#include <string>
+#include <sstream>
+
+namespace Engine {
+	vertex_buffer::vertex_buffer(GLsizeiptr size) : _vwarn(true), m_size(size), gl_buffer() {
+		WARN("CUSTOM SIZE VERTEX_BUFFER CALL");
+		//generates a buffer with $(size) memory, defaults to 2^18 bytes  
+		//todo: allow for resizing buffer 
+		glGenBuffers(1, &m_buffer);
+
+		GLuint prev_buf = s_bound_buffer;
+
+		m_size = size;
+
+		bind();
+		glBufferData(GL_ARRAY_BUFFER, size, NULL, GL_DYNAMIC_DRAW); //a bit yucky to default assign a buffer with 2^18 bytes of memory for GL_DYNAMIC_DRAW usage
+		//but it sizes the buffer to an acceptable worst case buffer size (accepts ~1500 rects(6 verts, 26 bytes each))
+
+		//m_heap = new uint8_t[m_size]; //2^18 bytes of memory
+
+		if (prev_buf) {
+			glBindBuffer(GL_ARRAY_BUFFER, prev_buf);
+		}
+	}
+
+	vertex_buffer::vertex_buffer() :_vwarn(true), m_size(1 << 18), gl_buffer() {
+		glGenBuffers(1, &m_buffer);
+
+		GLuint prev_buf = s_bound_buffer;
+
+		bind();
+		glBufferData(GL_ARRAY_BUFFER, m_size, NULL, GL_DYNAMIC_DRAW);
+
+		//m_heap = new uint8_t[1 << 18]; //2^18 bytes of memory
+
+		if (prev_buf) {
+			glBindBuffer(GL_ARRAY_BUFFER, prev_buf);
+		}
+	}
+
+	vertex_buffer::~vertex_buffer() {
+		glDeleteBuffers(1, &m_buffer);
+		WARN("vertex buffer deleted");
+
+		//delete[] m_heap;
+	}
+
+	void vertex_buffer::warn_mutate_nonbound_buffer() {
+		if (s_bound_buffer != m_buffer) {
+			WARN("vertex_buffer::clear: call to buffer modifying function of non-bound buffer object");
+			bind();
+		}
+	}
+
+	void vertex_buffer::clear() {
+		m_head = 0;
+		warn_mutate_nonbound_buffer();
+		glBufferData(GL_ARRAY_BUFFER, m_size, NULL, GL_DYNAMIC_DRAW);//orphan the buffer
+		//memset(m_heap, 0, m_content_size);
+		m_content_size = 0;
+	}
+
+	void vertex_buffer::bind() {
+		GLint x;
+		glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &x);
+
+		if (x == 0) {
+			ERROR("vertex buffer::bind: No currently bound VAO");
+		}
+		else
+		{
+			glBindBuffer(GL_ARRAY_BUFFER, m_buffer);
+			s_bound_buffer = m_buffer;
+		}
+	}
+
+	void vertex_buffer::push_back(size_t size, const void* data) {
+		//std::cout << "vertex_buffer.cpp::vertex_buffer::push_back(" << std::dec << size << ", " << std::hex << data << ")" << std::endl << std::dec;
+		m_content_size += size;
+		_vwarn = false;
+		overwrite(size, m_head, data);
+		//memcpy( m_heap + m_head, data, size);
+		_vwarn = true;
+		m_head += size;
+	}
+
+	void vertex_buffer::overwrite(size_t size, GLintptr offs, const void* data) {
+		//std::cout << "vertex_buffer.cpp::vertex_buffer::overwrite(" << size << ", " << offs << ", " << std::hex << data << ")" << " buffer size " << std::dec << m_size << " bytes " << std::dec << std::endl;
+		warn_mutate_nonbound_buffer();
+
+		//CheckGLError("vertex_buffer::overwrite before glBufferSubData");
+		glBufferSubData(GL_ARRAY_BUFFER, offs, size, data);
+		/*std::string s = "vertex_buffer::overwrite after glBufferSubData(GL_ARRAY_BUFFER, ";
+		std::stringstream ss;
+		ss << std::hex << data;
+		s = s + std::to_string(offs) + ", " + std::to_string(size) + ", " + ss.str() + ")";
+		CheckGLError(s.c_str());*/
+
+		if (_vwarn) {
+			WARN("vertex_buffer: overwrite {size=" << size << ", offs=" << offs << "data addr=" << data);
+		}
+
+		if (size + offs >= m_size) {
+			ERROR("vertex buffer size exceeded maximum limits of " << m_size << " bytes)");
+		}
+	}
+
+	void vertex_buffer::debug() {
+		return;
+		//
+		glGetBufferSubData(GL_ARRAY_BUFFER, 0, m_content_size, m_heap); //according to the spec, this syncs so can take ~30ms, calls to debug should be wrapped in compiler IF macros checking for DEBUG definition
+		CheckGLError("glGetBufferSubData");
+		//std::cout << "copy buffer data to member heap of vbuf for debug" << std::endl;
+
+		//std::cout << "vertex_buffer<" << this << ">{size = " << m_size << ", content_size = " << m_content_size << ", head = " << m_head << "}" << std::endl;
+		for (int offs = 0; offs < m_content_size; offs++) {
+			//std::cout << std::hex << +(m_heap[offs]) << " ";
+			if ( (offs+1) % 4 == 0) {
+				//std::cout << std::endl;
+			}
+		}
+		//std::cout << std::endl;
+	}
+
+	bool vertex_buffer::empty() {
+		return m_content_size == 0;
+	}
+
+	GLsizeiptr vertex_buffer::content_size() const {
+		return m_content_size;
+	}
+}
+
+#pragma once
+#include "gl_buffer.h"
+#define VBUF_OVERWRITE_WARNING 0 
+namespace Engine {
+    class vertex_buffer :
+        public gl_buffer
+    {
+    private:
+        GLuint m_buffer;
+        bool _vwarn;
+        void warn_mutate_nonbound_buffer();
+        GLsizeiptr m_size;
+        uint8_t* m_heap;
+    public:
+        vertex_buffer(GLsizeiptr buffer_size);
+        vertex_buffer();
+        ~vertex_buffer();
+
+        void clear() override;
+        void bind() override;
+        void push_back(size_t size, const void* data) override;
+        void overwrite(size_t size, GLintptr offs, const void* data) override;
+        void debug();
+        bool empty() override;
+
+        GLsizeiptr content_size() const;
+    };
+}
+
+#include "win_window.h"
+#include "GLFW/glfw3.h"
+
+namespace Engine {
+
+	static bool glfw_initialized = false;
+	static void glfw_error_callback(int error, const char* desc)
+	{
+		std::cout << "GLFW error " << error << ": " << desc << std::endl;
+	}
+
+	win_window::win_window(const window_desc& desc) : m_eventhandler(EventHandler()) {
+		std::cout << "pre init" << std::endl;
+
+		init(desc);
+	}
+
+	win_window::~win_window() {
+		close();
+	}
+
+	void win_window::on_update() {
+
+		glfwPollEvents();
+		glfwSwapBuffers(m_window);
+	}
+
+	void win_window::toggle_vsync(bool enabled) {
+		glfwSwapInterval(enabled ? 1 : 0);
+		m_state.vsync = enabled;
+	}
+
+	void win_window::toggle_mouse(bool enabled) {
+		glfwSetInputMode(m_window, GLFW_CURSOR, enabled ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);//DISBALED locks the cursor so it cannot leave the window client rect
+		m_state.mouse_visible = enabled;
+	}
+
+	bool win_window::mouse_visible() const {
+		return m_state.mouse_visible;
+	}
+
+	bool win_window::vsync_enabled() const {
+		return m_state.vsync;
+	}
+
+	uint32_t win_window::width() const {
+		return m_state.width;
+	}
+
+	uint32_t win_window::height() const {
+		return m_state.height;
+	}
+
+	void win_window::init(const window_desc& desc)
+	{
+		m_state.title = desc.m_title;
+		m_state.width = desc.m_width;
+		m_state.height = desc.m_height;
+		m_state.mouse_x = desc.m_width * .5f;
+		m_state.mouse_y = desc.m_height * .5f;
+		m_state.event_handler = &m_eventhandler;
+
+		//todo log window creation
+		if (!glfw_initialized) {
+			int32_t s = glfwInit();
+			if (s == GLFW_TRUE) {
+				std::cout << "GLFW initialized" << std::endl;
+				glfw_initialized = true;
+			}
+			else
+			{
+				std::cout << "failed to initialize glfw" << std::endl;
+				const char* err = new char[256];
+				glfwGetError(&err);
+				std::cout << "error: " << err << std::endl;
+			}
+			glfwSetErrorCallback((GLFWerrorfun)glfw_error_callback);
+		}
+
+		if (desc.m_fullscreen) {
+			int* monitor_array = new int;
+			glfwGetMonitors(monitor_array);
+			m_window = glfwCreateWindow(
+				desc.m_width,
+				desc.m_height,
+				desc.m_title.c_str(),
+				(GLFWmonitor*)monitor_array[0],
+				nullptr
+			);
+			delete monitor_array;
+		}
+		else
+		{
+			m_window = glfwCreateWindow(
+				desc.m_width,
+				desc.m_height,
+				desc.m_title.c_str(),
+				nullptr,
+				nullptr
+			);
+		}
+
+		glfwMakeContextCurrent(m_window);
+
+		if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+			std::cout << "Failed to initialize OpenGL context" << std::endl;
+		}
+
+		const unsigned char* vendor = glGetString(GL_VENDOR);
+		const unsigned char* renderer = glGetString(GL_RENDERER);
+		const unsigned char* ver = glGetString(GL_VERSION);
+		std::cout << "VENDOR: " << vendor << std::endl;
+		std::cout << "RENDERER: " << renderer << std::endl;
+		std::cout << "GLVersion: " << ver << std::endl;
+
+		glfwSetWindowPos(m_window, desc.m_pos_x, desc.m_pos_y);
+
+		glfwSetWindowUserPointer(m_window, &m_state);
+		toggle_vsync(desc.m_vsync);
+
+		glfwSetWindowSizeCallback(m_window, [](GLFWwindow* handle, int32_t width, int32_t height) {
+			window_state& state = *((window_state*)glfwGetWindowUserPointer(handle));
+			state.width = width;
+			state.height = height;
+
+			EventData e;
+			WindowResizeEventInfo f;
+			f.width = width;
+			f.height = height;
+			e.eventflags = EVENT_WINDOWRESIZE;
+			e.eventinfo.wri = f;
+
+			state.event_handler->Fire(e);
+		});
+
+		glfwSetWindowCloseCallback(m_window, [](GLFWwindow* handle) {
+			window_state& state = *((window_state*)glfwGetWindowUserPointer(handle));
+			EventData e;
+			e.eventflags = EVENT_WINDOWCLOSE;
+			state.event_handler->Fire(e);
+		});
+
+		glfwSetKeyCallback(m_window, [](GLFWwindow* handle, int32_t key, int32_t scancode, int32_t action, int32_t mods) {
+			window_state& state = *((window_state*)glfwGetWindowUserPointer(handle));
+			EventData e;
+			KeyEventInfo k;
+			k.action = action;
+			k.key = key;
+			k.mods = mods;
+			k.scancode = scancode;
+			switch (action)
+			{
+				case GLFW_PRESS:
+				{
+					e.eventflags = EVENT_KEYDOWN;
+				}
+				break;
+				case GLFW_RELEASE:
+				{
+					e.eventflags = EVENT_KEYUP;
+				}
+				break;
+				case GLFW_REPEAT:
+				{
+					e.eventflags = EVENT_KEYDOWN;
+				}
+				break;
+				default:
+					e.eventflags = EVENT_KEYDOWN;
+				break;
+			}
+			e.eventinfo.ki = k;
+			state.event_handler->Fire(e);
+		});
+
+		glfwSetCharCallback(m_window, [](GLFWwindow* handle, uint32_t codepoint) {
+			std::wstring s;
+			s += (wchar_t)codepoint;
+
+			int len2 = (int)s.length() + 1; //add 1 for null terminator
+			char* buffer = new char[2];
+			buffer[1] = '\0';
+			WideCharToMultiByte(CP_UTF8, 0, s.c_str(), len2, buffer, 1, 0, 0);
+			std::string str(buffer);
+
+			window_state& state = *((window_state*)glfwGetWindowUserPointer(handle));
+			EventData e;
+			e.eventflags = EVENT_CHAR;
+
+			e.eventinfo.ci.character = ((uint16_t*)str.c_str())[0];
+			state.event_handler->Fire(e);
+
+			delete[] buffer; //->Fire immediately calls the listeners in the same thread, I don't expect a race condition with this deletion vs Listeners using the event info. 
+			//Shouldn't happen anyway because I copied out the first char from the string
+		});
+
+		glfwSetMouseButtonCallback(m_window, [](GLFWwindow* handle, int32_t button, int32_t action, int32_t mods) {
+			window_state& state = *((window_state*)glfwGetWindowUserPointer(handle));
+			EventData e;
+			MouseButtonEventInfo m;
+			m.button = button;
+			m.action = action;
+			m.mods = mods;
+			e.eventinfo.mbi = m;
+			e.eventflags = EVENT_MOUSEBUTTON;
+			state.event_handler->Fire(e);
+		});
+
+		glfwSetScrollCallback(m_window, [](GLFWwindow* handle, double dX, double dY)
+		{
+			window_state& state = *((window_state*)glfwGetWindowUserPointer(handle));
+			EventData e;
+			MouseScrollEventInfo m;
+			m.dX = dX;
+			m.dY = dY;
+			e.eventinfo.msi = m;
+			e.eventflags = EVENT_MOUSESCROLL;
+			state.event_handler->Fire(e);
+			//WARN("scroll0");
+		});
+
+		glfwSetCursorPosCallback(m_window, [](GLFWwindow* handle, double x, double y)
+		{
+				window_state* state = ((window_state*)glfwGetWindowUserPointer(handle));
+				EventData e;
+				MouseMoveEventInfo m;
+				double dX, dY; 
+				dX = x - state->mouse_x;
+				dY = y - state->mouse_y;
+				m.xpos = dX;
+				m.ypos = dY;
+				state->mouse_x = x;
+				state->mouse_y = y;
+
+				e.eventinfo.mmi = m;
+				e.eventflags = EVENT_MOUSEMOVE;
+				state->event_handler->Fire(e);
+		});
+	}
+
+	void win_window::close() {
+		glfwDestroyWindow(m_window);
+	}
+
+	void win_window::set_cursor(LPCSTR cursortype) {
+		SetCursor(LoadCursorA(NULL, cursortype));
+	}
+
+	EventHandler& win_window::get_event_handler() {
+		return m_eventhandler;
+	}
+
+	glm::vec2 win_window::mouse_position() {
+		window_state& state = *((window_state*)glfwGetWindowUserPointer(m_window));
+		return glm::vec2{ state.mouse_x, state.mouse_y };
+	}
+}
+
+#pragma once
+#include "Window.h"
+#include "EventHandler.h"
+#include "core.h"
+
+#define CURSOR_HOURGLASS IDC_WAIT
+#define CURSOR_DEFAULT IDC_ARROW
+#define CURSOR_HAND IDC_HAND
+#define CURSOR_IBEAM IDC_IBEAM
+#define CURSOR_SIZEVERTICAL IDC_SIZENS
+#define CURSOR_SIZEHORIZONTAL IDC_SIZEWE
+
+//Based on Engine::win_window class from IN3026 Advanced Games Technology (Chris Child)
+namespace Engine {
+
+    class win_window : public Engine::window
+    {
+    public:
+        win_window(const window_desc &desc);
+        ~win_window();
+
+        void on_update() override;
+        void toggle_vsync(bool enabled) override;
+        void toggle_mouse(bool enabled) override;
+        bool mouse_visible() const override;
+        bool vsync_enabled() const override;
+
+        uint32_t width() const override;
+        uint32_t height() const override;
+
+        void set_cursor(LPCSTR cursortype);
+        EventHandler& get_event_handler();
+
+        glm::vec2 mouse_position();
+
+    private:
+        virtual void init(const window_desc& desc);
+        virtual void close();
+
+        GLFWwindow* m_window = 0;
+        EventHandler m_eventhandler;
+        
+        struct window_state
+        {
+            std::string title;
+            float mouse_x;
+            float mouse_y;
+            uint32_t width;
+            uint32_t height;
+            bool vsync;
+            bool fullscreen;
+            bool mouse_visible;
+            bool mouse_locked; 
+            EventHandler* event_handler;
+        };
+
+        window_state m_state;
+    };
+
+}
+
+#include "core.h"
+
+namespace Engine {
+	struct window_desc
+	{
+		bool		m_fullscreen;
+		uint32_t	m_width;
+		uint32_t	m_height;
+		uint32_t	m_pX;
+		uint32_t	m_pY;
+		bool		m_vsync;
+		std::string m_title;
+
+		window_desc(
+			std::string const& title = "Quantbench",
+			uint32_t width = 800,
+			uint32_t height = 600,
+			uint32_t pos_x = 10,
+			uint32_t pos_y = 50
+		) : m_width(width), m_height(height), m_pX(pos_x), m_pY(pos_y), m_fullscreen(false), m_vsync(false), m_title(title)
+		{
+
+		}
+	};
+
+	class window {
+	public:
+		static std::unique_ptr<window> create(const window_desc& params = window_desc());
+
+		virtual ~window() = default;
+
+		virtual void on_update() = NULL;
+		virtual void toggle_vsync(bool enabled) = NULL;
+		virtual void toggle_mouse(bool enabled) = NULL;
+		virtual bool mouse_visible() const = NULL;
+		virtual bool vsync_enabled() const = NULL;
+
+		virtual uint32_t width() const = NULL; //immutable return value
+		virtual uint32_t height() const = NULL;
+	};
+}

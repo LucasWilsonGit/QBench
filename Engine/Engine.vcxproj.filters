@@ -1,0 +1,105 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="Src\application.cpp">
+      <Filter>Src\base</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\gl_buffer.cpp">
+      <Filter>Src\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\gl_shader.cpp">
+      <Filter>Src\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\renderer.cpp">
+      <Filter>Src\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\vertex_buffer.cpp">
+      <Filter>Src\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\win_window.cpp">
+      <Filter>Src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Event.cpp">
+      <Filter>Src\event</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\EventHandler.cpp">
+      <Filter>Src\event</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\src.cpp">
+      <Filter>Src</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Camera.cpp">
+      <Filter>Src</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Framebuffer.cpp">
+      <Filter>Src</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Texture.cpp">
+      <Filter>Src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Src\Window.h">
+      <Filter>Src\base</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\application.h">
+      <Filter>Src\base</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\gl_buffer.h">
+      <Filter>Src\opengl</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\gl_shader.h">
+      <Filter>Src\opengl</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\renderer.h">
+      <Filter>Src\opengl</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\vertex_buffer.h">
+      <Filter>Src\opengl</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\win_window.h">
+      <Filter>Src\windows</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\Event.h">
+      <Filter>Src\event</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\EventHandler.h">
+      <Filter>Src\event</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\timer.h">
+      <Filter>Src\base</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\core.h" />
+    <ClInclude Include="Src\Engine.h" />
+    <ClInclude Include="Src\luainclude.h" />
+    <ClInclude Include="Src\Camera.h">
+      <Filter>Src</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\Framebuffer.h">
+      <Filter>Src</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\Texture.h">
+      <Filter>Src</Filter>
+    </ClInclude>
+    <ClInclude Include="Ext\CsvParser.h">
+      <Filter>Src</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Src">
+      <UniqueIdentifier>{114e5d74-3ccd-4bc1-afdc-010030496614}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Src\base">
+      <UniqueIdentifier>{cde49f9b-27fd-48b7-b597-6ade39ec3cec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Src\opengl">
+      <UniqueIdentifier>{576144a5-453b-4ad6-afe6-546a522f79ce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Src\windows">
+      <UniqueIdentifier>{85a05506-92a4-4f10-91e4-b08293f657f9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Src\event">
+      <UniqueIdentifier>{31fe4a99-f98a-4d96-8c79-a40249f56c02}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

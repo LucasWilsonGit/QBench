@@ -1,0 +1,2 @@
+C:\Users\lucas\source\repos\DissertationProject\Engine\Ext\freetype\bin\Debug-windows-x86_64\freetype\freetype.pdb
+C:\Users\lucas\source\repos\DissertationProject\Engine\Ext\freetype\inter\Debug-windows-x86_64\freetype\freetype.pdb
