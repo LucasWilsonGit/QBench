@@ -1,4 +1,13 @@
+
+QBench was my final year dissertation project. I hand wrote a novel rendering pipeline for basic quad and text rendering, and used Lua to build a custom GUI framework ontop of these basic capabilities. 
+
+---------------------------------
+
+
+
+
 Files & Folders:
+
 
 /DissertationProject/ 				contains application files, contains datasets .CSV, contains executable .EXE
 /DissertationProject/ExampleBots/ 		contains example bots to demonstrate the app functionality
